@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>族語點擊學習 Demo - 語音辨識版</title>
+    <style>
+        /* 保持原有樣式 */
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: #f4f4f9;
+            color: #333;
+        }
+        #game-container {
+            width: 90%;
+            max-width: 600px;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+        #progress-bar {
+            height: 10px;
+            background-color: #ddd;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        #progress {
+            height: 100%;
+            width: 0%;
+            background-color: #4CAF50;
+            border-radius: 5px;
+            transition: width 0.5s ease-in-out;
+        }
+        #audio-hint {
+            font-size: 1.2em;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        #options-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-top: 30px;
+            /* 新增：用於鎖定選項的透明遮罩 */
+            position: relative; 
+        }
+        .options-locked::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.5); /* 半透明遮罩 */
+            cursor: not-allowed;
+            z-index: 10;
+        }
+        .option-block {
+            padding: 20px 10px;
+            background-color: #007bff;
+            color: white;
+            font-size: 1.1em;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+            height: 100px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        .option-block:hover {
+            background-color: #0056b3;
+            transform: translateY(-2px);
+        }
+        /* 錯誤點擊的反饋樣式 */
+        .wrong-answer {
+            animation: shake 0.5s;
+            background-color: #dc3545 !important;
+        }
+        @keyframes shake {
+            0%, 100% {transform: translateX(0);}
+            20%, 60% {transform: translateX(-10px);}
+            40%, 80% {transform: translateX(10px);}
+        }
+        .final-screen {
+            font-size: 1.5em;
+            color: #28a745;
+            margin-top: 50px;
+        }
+        #replay-button {
+            padding: 10px 20px;
+            margin-top: 20px;
+            background-color: #ffc107;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+        }
+        #mode-selector {
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: #e9ecef;
+            border-radius: 5px;
+        }
+        #mode-selector label {
+            margin-right: 15px;
+            font-weight: bold;
+        }
+        #mode-selector input[type="radio"] {
+            margin-right: 5px;
+        }
+        #mode-selector input[type="radio"]:checked + label {
+            color: #007bff;
+        }
+        /* 新增：麥克風按鈕樣式 */
+        #mic-button {
+            padding: 15px; 
+            font-size: 1.5em; 
+            cursor: pointer; 
+            background-color: #6c757d; 
+            color: white; 
+            border: none; 
+            border-radius: 50%;
+        }
+        #mic-button.recording {
+            background-color: #dc3545;
+            animation: pulse 1s infinite;
+        }
+        /* 新增：喇叭按鈕樣式，與麥克風按鈕保持一致 */
+        /* #play-button {
+            padding: 15px; 
+            font-size: 1.5em; 
+            cursor: pointer; 
+            background-color: #6c757d; 
+            color: white; 
+            border: none; 
+            border-radius: 50%;
+        } */
+        @keyframes pulse {
+            0% {box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7);}
+            70% {box-shadow: 0 0 0 10px rgba(220, 53, 69, 0);}
+            100% {box-shadow: 0 0 0 0 rgba(220, 53, 69, 0);}
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <h1>族語學習遊戲 Demo - 語音互動版</h1>
+    <div id="mode-selector">
+        <label>出題模式：</label>
+        <input type="radio" id="mode-sequential" name="game-mode" value="sequential" checked>
+        <label for="mode-sequential">順序模式</label>
+        <input type="radio" id="mode-random" name="game-mode" value="random">
+        <label for="mode-random">隨機模式</label>
+    </div>
+    <div id="progress-bar"><div id="progress"></div></div>
+    
+    <div id="audio-hint">請選擇模式並點擊喇叭圖標開始遊戲。</div>
+
+   <div style="display:flex; justify-content:center; align-items:center;">
+    <!-- <button id="play-button" onclick="playAudio()" >🔊</button> -->
+    <!-- <button id="play-button" onclick="playAudio()" style="padding: 15px; font-size: 1.5em; cursor: pointer; background-color: #6c757d; color: white; border: none; border-radius: 50%; margin-right: 40px;">🔊</button> -->
+    <button id="play-button" onclick="playAudio()" style="padding: 15px; font-size: 1.5em; cursor: pointer; background-color: #6c757d; color: white; border: none; border-radius: 50%; margin-right: 40px;">🔊</button>
+    <button id="mic-button" onclick="startSpeechRecognition()" disabled>🎤</button>
+   </div>
+
+    <div id="options-container" class="options-locked"> 
+        </div>
+    
+    <div id="feedback" style="margin-top: 20px; font-size: 1.2em;"></div>
+</div>
+
+<script>
+// ----------------------------------------------------------------------
+// 步驟 1: 遊戲資料設定 - 增加羅馬拼音 romanization
+// ----------------------------------------------------------------------
+const gameData = [
+    { word: "媽媽", audioFile: "mama.mp3", correctText: "媽媽", romanization: "kina" }, 
+    { word: "芋頭", audioFile: "taro.mp3", correctText: "芋頭", romanization: "vasa" },
+    { word: "太陽", audioFile: "sun.mp3", correctText: "太陽", romanization: "qadaw" },
+];
+
+// ----------------------------------------------------------------------
+// 步驟 2: 遊戲狀態變數
+// ----------------------------------------------------------------------
+let currentLevel = 0; 
+let currentGameData = []; 
+const totalOriginalLevels = gameData.length; 
+let isRecognizing = false; // 追蹤語音辨識狀態
+let recognitionTimeout; // ⚠️ 新增：用於強制停止的計時器
+
+const optionsContainer = document.getElementById('options-container');
+const progressElement = document.getElementById('progress');
+const feedbackElement = document.getElementById('feedback');
+const audioHintElement = document.getElementById('audio-hint');
+const playButton = document.getElementById('play-button');
+const micButton = document.getElementById('mic-button'); // 取得麥克風按鈕
+let currentAudio = null;
+
+// ----------------------------------------------------------------------
+// 步驟 3: 通用函式 (包含隨機排序和動態選項生成)
+// ----------------------------------------------------------------------
+function shuffleArray(array) {
+    const shuffled = [...array]; 
+    for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+}
+
+function getDistractorOptions(correctWord) {
+    const allWords = gameData.map(data => data.word); 
+    let distractors = allWords.filter(word => word !== correctWord); 
+    const numDistractorsNeeded = Math.min(2, distractors.length);
+    distractors = shuffleArray(distractors).slice(0, numDistractorsNeeded); 
+    
+    let options = [{ text: correctWord, isCorrect: true }];
+
+    distractors.forEach(word => {
+        options.push({ text: word, isCorrect: false });
+    });
+
+    while (options.length < 3) {
+        options.push({ text: '錯誤選項' + options.length, isCorrect: false });
+    }
+    return shuffleArray(options);
+}
+
+// ----------------------------------------------------------------------
+// 步驟 4: 語音辨識核心功能 - 新增！
+// ----------------------------------------------------------------------
+// 檢查瀏覽器是否支援語音辨識
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognition;
+
+function setupSpeechRecognition() {
+    if (!SpeechRecognition) {
+        alert("抱歉！您的瀏覽器不支援 Web Speech API 語音辨識功能。此專題的互動部分可能無法運行。請嘗試使用 Chrome 瀏覽器。");
+        micButton.disabled = true;
+        return;
+    }
+    
+    recognition = new SpeechRecognition();
+    recognition.continuous = false; // 只錄一次
+    recognition.lang = 'zh-TW'; // 嘗試用中文引擎辨識// ⚠️ 注意：此處設定為英文，以盡可能準確辨識羅馬拼音
+    recognition.interimResults = false;
+
+    // 啟動錄音
+    recognition.onstart = () => {
+        isRecognizing = true;
+        micButton.classList.add('recording');
+        micButton.disabled = false;
+        audioHintElement.textContent = "👂 正在聆聽中... 請說出族語的羅馬拼音。";
+    
+    // ⚠️ 關鍵修正：新增 5 秒強制停止計時器，避免卡死
+        recognitionTimeout = setTimeout(() => {
+            if (isRecognizing) { // 避免重複停止
+                recognition.stop();
+                audioHintElement.textContent = "⚠️ 辨識逾時，請確保收音清晰並再次重試。";
+            }
+        }, 5000); // 5000 毫秒 = 5 秒
+
+    };
+
+    // 錄音錯誤
+    recognition.onerror = (event) => {
+        isRecognizing = false;
+        micButton.classList.remove('recording');
+        micButton.disabled = false;
+        clearTimeout(recognitionTimeout); // ⚠️ 修正：清除計時器
+        audioHintElement.textContent = `❌ 語音辨識錯誤：${event.error}。請再次點擊麥克風重試。`;
+        console.error('Speech Recognition Error:', event.error);
+    };
+
+    // 錄音結束
+    recognition.onend = () => {
+        isRecognizing = false;
+        micButton.classList.remove('recording');
+        clearTimeout(recognitionTimeout); // ⚠️ 修正：清除計時器
+    };
+
+    // 辨識結果
+    recognition.onresult = (event) => {
+        clearTimeout(recognitionTimeout); // ⚠️ 修正：清除計時器
+        const transcript = event.results[0][0].transcript.toLowerCase().trim();
+        checkPronunciation(transcript);
+    };
+}
+
+function startSpeechRecognition() {
+    if (isRecognizing) {
+        recognition.stop();
+        return;
+    }
+    // 每次開始辨識前，先重設提示文字
+    audioHintElement.textContent = "請對著麥克風清楚地說出羅馬拼音...";
+    try {
+        recognition.start();
+    } catch (e) {
+        console.error("Recognition start error:", e);
+        audioHintElement.textContent = "無法啟動麥克風。請確認已授予網站麥克風權限。";
+    }
+}
+
+function checkPronunciation(playerTranscript) {
+    const currentData = currentGameData[currentLevel];
+    // 預期正確的羅馬拼音
+    const expectedRomanization = currentData.romanization.toLowerCase().trim();
+
+    // 判斷邏輯：如果辨識結果包含預期拼音 (容許一些雜音)
+    const isCorrectPronunciation = playerTranscript.includes(expectedRomanization) 
+                                   || expectedRomanization.includes(playerTranscript); 
+    
+    if (isCorrectPronunciation) {
+        // 唸對了：解鎖選項，進入點擊階段
+        audioHintElement.textContent = `✅ 發音正確！辨識結果為：${playerTranscript}。現在請點擊對應的圖片方塊。`;
+        micButton.disabled = true;
+        optionsContainer.classList.remove('options-locked'); // 解鎖選項
+    } else {
+        // 唸錯了：鎖定選項，必須重唸
+        audioHintElement.textContent = `❌ 發音不正確！辨識結果為：${playerTranscript}。請再次點擊麥克風重試。`;
+        micButton.disabled = false;
+        optionsContainer.classList.add('options-locked'); // 保持鎖定
+    }
+}
+
+
+// ----------------------------------------------------------------------
+// 步驟 5: 核心功能 - 播放音檔 (現在需要啟用麥克風)
+// ----------------------------------------------------------------------
+function playAudio() {
+    if (currentLevel >= currentGameData.length) return;
+    
+    const currentData = currentGameData[currentLevel];
+    
+    // 1. 播放音檔
+    const audioPath = '../audio/' + currentData.audioFile; // ✅ 修正：跳出 test 資料夾，回到根目錄找 audio
+    currentAudio = new Audio(audioPath);
+
+    currentAudio.play().catch(error => {
+        console.error("Audio playback failed:", error);
+        alert("語音播放失敗，請確認音檔檔案名稱與路徑是否正確。");
+    });
+    
+    // 2. 播放完畢後，啟用麥克風按鈕
+    currentAudio.onended = () => {
+        micButton.disabled = false;
+        audioHintElement.textContent = `請點擊 🎤 麥克風，唸出羅馬拼音「${currentData.romanization}」。`;
+    };
+
+    playButton.disabled = true;
+    currentAudio.play().finally(() => {
+        playButton.disabled = false;
+    });
+
+    // 剛進入關卡時，選項必須鎖定
+    optionsContainer.classList.add('options-locked'); 
+    micButton.disabled = true; 
+}
+
+
+// ----------------------------------------------------------------------
+// 步驟 6: 核心功能 - 檢查答案與切換 (保持不變)
+// ----------------------------------------------------------------------
+function checkAnswer(isCorrect, blockElement) {
+    if (currentLevel >= currentGameData.length) return;
+
+    if (isCorrect) {
+        feedbackElement.textContent = "✅ 答對了！進入下一關！";
+        // 答對後，禁用麥克風
+        micButton.disabled = true; 
+        setTimeout(nextLevel, 1000); 
+    } else {
+        feedbackElement.textContent = "❌ 答錯了！請再聽一次並重新唸出。";
+        blockElement.classList.add('wrong-answer');
+        
+        setTimeout(() => {
+            blockElement.classList.remove('wrong-answer');
+        }, 500);
+        
+        // 答錯後，重新鎖定選項，讓玩家必須重唸
+        optionsContainer.classList.add('options-locked');
+        micButton.disabled = false; // 啟用麥克風讓玩家重試
+        setTimeout(playAudio, 1000); 
+    }
+}
+
+function nextLevel() {
+    currentLevel++;
+    renderLevel();
+}
+
+// ----------------------------------------------------------------------
+// 步驟 7: 渲染關卡 (保持不變)
+// ----------------------------------------------------------------------
+function renderLevel() {
+    if (currentLevel >= currentGameData.length) {
+        // 遊戲結束
+        optionsContainer.innerHTML = `<div class="final-screen">恭喜！你已完成所有關卡！<br>🎉 專題 Demo 成功運行 🎉</div>`;
+        feedbackElement.textContent = "";
+        playButton.style.display = 'none';
+        micButton.style.display = 'none';
+        audioHintElement.textContent = "點擊下方的按鈕重新開始。";
+        
+        const restartButton = document.createElement('button');
+        restartButton.id = 'replay-button';
+        restartButton.textContent = '重新開始';
+        restartButton.onclick = startGame; 
+        optionsContainer.appendChild(restartButton);
+        
+        updateProgress();
+        return;
+    }
+
+    const currentData = currentGameData[currentLevel];
+    optionsContainer.innerHTML = ''; 
+    feedbackElement.textContent = "";
+    playButton.style.display = 'block';
+    micButton.style.display = 'block'; // 確保麥克風按鈕顯示
+
+    // 鎖定選項
+    optionsContainer.classList.add('options-locked');
+
+    // 🔑 關鍵步驟：動態生成帶有擾亂選項的列表
+    const dynamicOptions = getDistractorOptions(currentData.word);
+
+    // 渲染選項方塊
+    dynamicOptions.forEach(option => {
+        const block = document.createElement('div');
+        block.classList.add('option-block');
+        block.textContent = option.text; // Demo 使用文字
+        
+        // 只有在選項解鎖時才能點擊
+        block.onclick = () => checkAnswer(option.isCorrect, block);
+        
+        optionsContainer.appendChild(block);
+    });
+
+    updateProgress();
+    playAudio(); 
+}
+
+// ----------------------------------------------------------------------
+// 步驟 8: 遊戲啟動與模式管理
+// ----------------------------------------------------------------------
+function updateProgress() {
+    const percentage = (currentLevel / currentGameData.length) * 100; 
+    progressElement.style.width = `${percentage}%`;
+}
+
+function startGame() {
+    const modeSelector = document.querySelector('input[name="game-mode"]:checked');
+    const isRandom = modeSelector && modeSelector.value === 'random';
+
+    if (isRandom) {
+        currentGameData = shuffleArray(gameData);
+        audioHintElement.textContent = "已設定為隨機模式，請點擊喇叭圖標開始。";
+    } else {
+        currentGameData = [...gameData]; 
+        audioHintElement.textContent = "已設定為順序模式，請點擊喇叭圖標開始。";
+    }
+    
+    currentLevel = 0;
+    renderLevel();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // 初始化語音辨識
+    setupSpeechRecognition();
+    
+    const modeInputs = document.querySelectorAll('input[name="game-mode"]');
+    modeInputs.forEach(input => {
+        input.addEventListener('change', startGame);
+    });
+    
+    startGame();
+});
+</script>
+</body>
+</html>
