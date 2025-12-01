@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>族語點擊學習 Demo (MVP)</title>
+    <style>
+        /* 保持原有樣式，沒有變化 */
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: #f4f4f9;
+            color: #333;
+        }
+        #game-container {
+            width: 90%;
+            max-width: 600px;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+        #progress-bar {
+            height: 10px;
+            background-color: #ddd;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        #progress {
+            height: 100%;
+            width: 0%;
+            background-color: #4CAF50;
+            border-radius: 5px;
+            transition: width 0.5s ease-in-out;
+        }
+        #audio-hint {
+            font-size: 1.2em;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        #options-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-top: 30px;
+        }
+        .option-block {
+            padding: 20px 10px;
+            background-color: #007bff;
+            color: white;
+            font-size: 1.1em;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+            /* 模擬圖片區塊，實際專題中會替換成 <img src="..."> */
+            height: 100px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        .option-block:hover {
+            background-color: #0056b3;
+            transform: translateY(-2px);
+        }
+        /* 錯誤點擊的反饋樣式 */
+        .wrong-answer {
+            animation: shake 0.5s;
+            background-color: #dc3545 !important;
+        }
+        @keyframes shake {
+            0%, 100% {transform: translateX(0);}
+            20%, 60% {transform: translateX(-10px);}
+            40%, 80% {transform: translateX(10px);}
+        }
+        .final-screen {
+            font-size: 1.5em;
+            color: #28a745;
+            margin-top: 50px;
+        }
+        #replay-button {
+            padding: 10px 20px;
+            margin-top: 20px;
+            background-color: #ffc107;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+        }
+        #mode-selector {
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: #e9ecef;
+            border-radius: 5px;
+        }
+        #mode-selector label {
+            margin-right: 15px;
+            font-weight: bold;
+        }
+        #mode-selector input[type="radio"] {
+            margin-right: 5px;
+        }
+        #mode-selector input[type="radio"]:checked + label {
+            color: #007bff;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <h1>族語學習遊戲 Demo</h1>
+    <div id="mode-selector">
+        <label>出題模式：</label>
+        <input type="radio" id="mode-sequential" name="game-mode" value="sequential" checked>
+        <label for="mode-sequential">順序模式</label>
+        <input type="radio" id="mode-random" name="game-mode" value="random">
+        <label for="mode-random">隨機模式</label>
+    </div>
+    <div id="progress-bar"><div id="progress"></div></div>
+    
+    <div id="audio-hint">請選擇模式並點擊喇叭圖標開始遊戲。</div>
+
+    <button id="play-button" onclick="playAudio()" style="padding: 15px; font-size: 1.5em; cursor: pointer; background-color: #6c757d; color: white; border: none; border-radius: 50%;">🔊</button>
+
+    <div id="options-container">
+        </div>
+    
+    <div id="feedback" style="margin-top: 20px; font-size: 1.2em;"></div>
+</div>
+
+<script>
+// ----------------------------------------------------------------------
+// 步驟 1: 遊戲資料設定 - **已移除固定的 options 陣列**
+// ----------------------------------------------------------------------
+const gameData = [
+    { word: "媽媽", audioFile: "mama.mp3", correctText: "媽媽" }, 
+    { word: "芋頭", audioFile: "taro.mp3", correctText: "芋頭" },
+    { word: "太陽", audioFile: "sun.mp3", correctText: "太陽" },
+    // **建議：未來請在這裡新增更多題目，讓擾亂選項更豐富！**
+    // { word: "爸爸", audioFile: "baba.mp3", correctText: "爸爸" }, 
+    // { word: "水", audioFile: "water.mp3", correctText: "水" }
+];
+
+// ----------------------------------------------------------------------
+// 步驟 2: 遊戲狀態變數
+// ----------------------------------------------------------------------
+let currentLevel = 0; 
+let currentGameData = []; 
+const totalOriginalLevels = gameData.length; 
+
+const optionsContainer = document.getElementById('options-container');
+const progressElement = document.getElementById('progress');
+const feedbackElement = document.getElementById('feedback');
+const audioHintElement = document.getElementById('audio-hint');
+const playButton = document.getElementById('play-button');
+let currentAudio = null;
+
+// ----------------------------------------------------------------------
+// 步驟 3: 通用函式 (包含隨機排序和動態選項生成)
+// ----------------------------------------------------------------------
+// 隨機打亂陣列（Fisher-Yates shuffle 演算法）
+function shuffleArray(array) {
+    const shuffled = [...array]; 
+    for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+}
+
+/**
+ * 根據正確答案，動態生成包含擾亂選項的最終選項列表
+ * @param {string} correctWord - 當前關卡的正確答案文字
+ * @returns {Array} 包含 3 個選項的陣列 (1正確, 2擾亂, 且順序打亂)
+ */
+function getDistractorOptions(correctWord) {
+    // 取得所有題目中的單字列表
+    const allWords = gameData.map(data => data.word); 
+
+    // 過濾掉正確答案，得到所有可能的擾亂選項
+    let distractors = allWords.filter(word => word !== correctWord); 
+    
+    // 如果擾亂選項不足 2 個，則使用所有可用的擾亂選項
+    const numDistractorsNeeded = Math.min(2, distractors.length);
+    
+    // 將擾亂選項打亂並選取所需的數量
+    distractors = shuffleArray(distractors).slice(0, numDistractorsNeeded); 
+    
+    // 確保選項至少有 3 個 (正確 + 2擾亂)，如果題目太少，可能少於 3 個
+    
+    // 組合正確答案和擾亂選項
+    let options = [
+        { text: correctWord, isCorrect: true }
+    ];
+
+    distractors.forEach(word => {
+        options.push({ text: word, isCorrect: false });
+    });
+
+    // 如果總選項數不足 3 個，填充空白選項 (當題目數量太少時發生)
+    while (options.length < 3) {
+        options.push({ text: '錯誤選項' + options.length, isCorrect: false });
+    }
+
+    // 最終將整個選項列表打亂，避免正確答案總是在第一個位置
+    return shuffleArray(options);
+}
+
+// ----------------------------------------------------------------------
+// 步驟 4: 核心功能 - 播放音檔 (保持不變)
+// ----------------------------------------------------------------------
+function playAudio() {
+    if (currentLevel >= currentGameData.length) return;
+    
+    const currentData = currentGameData[currentLevel];
+    
+    // --- 實際專題替換程式碼：播放音檔 ---
+    const audioPath = 'audio/' + currentData.audioFile;
+    currentAudio = new Audio(audioPath);
+
+    currentAudio.play().catch(error => {
+        console.error("Audio playback failed:", error);
+        alert("語音播放失敗，請確認音檔檔案名稱與路徑是否正確，或在畫面上點擊一下。");
+    });
+    // ------------------------------------------
+
+    audioHintElement.textContent = `請根據您聽到的族語，點擊對應的圖片方塊。`;
+    playButton.disabled = true;
+    setTimeout(() => { playButton.disabled = false; }, 2500);
+}
+
+// ----------------------------------------------------------------------
+// 步驟 5: 核心功能 - 檢查答案與切換 (保持不變)
+// ----------------------------------------------------------------------
+function checkAnswer(isCorrect, blockElement) {
+    if (currentLevel >= currentGameData.length) return;
+
+    if (isCorrect) {
+        feedbackElement.textContent = "✅ 答對了！進入下一關！";
+        setTimeout(nextLevel, 1000); 
+    } else {
+        feedbackElement.textContent = "❌ 答錯了！請再聽一次。";
+        blockElement.classList.add('wrong-answer');
+        
+        setTimeout(() => {
+            blockElement.classList.remove('wrong-answer');
+        }, 500);
+        
+        setTimeout(playAudio, 1000); 
+    }
+}
+
+function nextLevel() {
+    currentLevel++;
+    renderLevel();
+}
+
+// ----------------------------------------------------------------------
+// 步驟 6: 渲染關卡 - **使用動態選項**
+// ----------------------------------------------------------------------
+function renderLevel() {
+    if (currentLevel >= currentGameData.length) {
+        // ... (遊戲結束邏輯保持不變) ...
+        optionsContainer.innerHTML = `<div class="final-screen">恭喜！已完成所有關卡！<br> 專題 Demo 1 </div>`;
+        feedbackElement.textContent = "";
+        playButton.style.display = 'none';
+        audioHintElement.textContent = "點擊下方的按鈕重新開始。";
+        
+        const restartButton = document.createElement('button');
+        restartButton.id = 'replay-button';
+        restartButton.textContent = '重新開始';
+        restartButton.onclick = startGame; 
+        optionsContainer.appendChild(restartButton);
+        
+        updateProgress();
+        return;
+    }
+
+    const currentData = currentGameData[currentLevel];
+    optionsContainer.innerHTML = ''; 
+    feedbackElement.textContent = "";
+    playButton.style.display = 'block';
+
+    // 🔑 關鍵步驟：動態生成帶有擾亂選項的列表
+    const dynamicOptions = getDistractorOptions(currentData.word);
+
+    // 渲染選項方塊
+    dynamicOptions.forEach(option => {
+        const block = document.createElement('div');
+        block.classList.add('option-block');
+        block.textContent = option.text; // Demo 使用文字
+        
+        // 綁定點擊事件，使用動態生成的 isCorrect 屬性
+        block.onclick = () => checkAnswer(option.isCorrect, block);
+        
+        optionsContainer.appendChild(block);
+    });
+
+    updateProgress();
+    playAudio(); 
+}
+
+// ----------------------------------------------------------------------
+// 步驟 7: 進度條更新 (保持不變)
+// ----------------------------------------------------------------------
+function updateProgress() {
+    const percentage = (currentLevel / currentGameData.length) * 100; 
+    progressElement.style.width = `${percentage}%`;
+}
+
+// ----------------------------------------------------------------------
+// 步驟 8: 遊戲啟動與模式管理 (保持不變)
+// ----------------------------------------------------------------------
+function startGame() {
+    const modeSelector = document.querySelector('input[name="game-mode"]:checked');
+    const isRandom = modeSelector && modeSelector.value === 'random';
+
+    if (isRandom) {
+        currentGameData = shuffleArray(gameData);
+        audioHintElement.textContent = "已設定為隨機模式，請點擊喇叭圖標開始。";
+    } else {
+        currentGameData = [...gameData]; 
+        audioHintElement.textContent = "已設定為順序模式，請點擊喇叭圖標開始。";
+    }
+    
+    currentLevel = 0;
+    renderLevel();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const modeInputs = document.querySelectorAll('input[name="game-mode"]');
+    modeInputs.forEach(input => {
+        input.addEventListener('change', startGame);
+    });
+    
+    startGame();
+});
+</script>
+</body>
+</html>

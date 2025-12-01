@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>族語點擊學習 Demo (MVP)</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: #f4f4f9;
+            color: #333;
+        }
+        #game-container {
+            width: 90%;
+            max-width: 600px;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+        #progress-bar {
+            height: 10px;
+            background-color: #ddd;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        #progress {
+            height: 100%;
+            width: 0%;
+            background-color: #4CAF50;
+            border-radius: 5px;
+            transition: width 0.5s ease-in-out;
+        }
+        #audio-hint {
+            font-size: 1.2em;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        #options-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-top: 30px;
+        }
+        .option-block {
+            padding: 20px 10px;
+            background-color: #007bff;
+            color: white;
+            font-size: 1.1em;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+            /* 模擬圖片區塊，實際專題中會替換成 <img src="..."> */
+            height: 100px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        .option-block:hover {
+            background-color: #0056b3;
+            transform: translateY(-2px);
+        }
+        /* 錯誤點擊的反饋樣式 */
+        .wrong-answer {
+            animation: shake 0.5s;
+            background-color: #dc3545 !important;
+        }
+        @keyframes shake {
+            0%, 100% {transform: translateX(0);}
+            20%, 60% {transform: translateX(-10px);}
+            40%, 80% {transform: translateX(10px);}
+        }
+        .final-screen {
+            font-size: 1.5em;
+            color: #28a745;
+            margin-top: 50px;
+        }
+        #replay-button {
+            padding: 10px 20px;
+            margin-top: 20px;
+            background-color: #ffc107;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <h1>族語學習遊戲 Demo</h1>
+    <div id="progress-bar"><div id="progress"></div></div>
+    
+    <div id="audio-hint">點擊下方的喇叭圖標，開始聽取第一個單字。</div>
+
+    <button id="play-button" onclick="playAudio()" style="padding: 15px; font-size: 1.5em; cursor: pointer; background-color: #6c757d; color: white; border: none; border-radius: 50%;">🔊</button>
+
+    <div id="options-container">
+        </div>
+    
+    <div id="feedback" style="margin-top: 20px; font-size: 1.2em;"></div>
+</div>
+
+<script>
+// ----------------------------------------------------------------------
+// 步驟 1: 遊戲資料設定 - 這裡放置你的所有單字、音檔和選項
+// ----------------------------------------------------------------------
+// 注意：在你的專題中，你需要將 audioFile 替換成真實的族語語音檔路徑
+// 例如：new Audio('audio/mama.mp3')
+const gameData = [
+    {
+        word: "媽媽",
+        audioFile: "mama.mp3", // 語音檔路徑佔位符
+        correctText: "媽媽", // 正確答案的文字提示
+        // 為了 Demo 簡單，選項固定，但實際專題應包含圖片URL
+        options: [
+            { text: "媽媽", isCorrect: true }, 
+            { text: "芋頭", isCorrect: false }, 
+            { text: "太陽", isCorrect: false }
+        ]
+    },
+    {
+        word: "芋頭",
+        audioFile: "taro.mp3",
+        correctText: "芋頭",
+        options: [
+            { text: "太陽", isCorrect: false },
+            { text: "芋頭", isCorrect: true },
+            { text: "媽媽", isCorrect: false }
+        ]
+    },
+    {
+        word: "太陽",
+        audioFile: "sun.mp3",
+        correctText: "太陽",
+        options: [
+            { text: "媽媽", isCorrect: false },
+            { text: "芋頭", isCorrect: false },
+            { text: "太陽", isCorrect: true }
+        ]
+    }
+];
+
+let currentLevel = 0; // 當前關卡索引
+const totalLevels = gameData.length;
+const optionsContainer = document.getElementById('options-container');
+const progressElement = document.getElementById('progress');
+const feedbackElement = document.getElementById('feedback');
+const audioHintElement = document.getElementById('audio-hint');
+const playButton = document.getElementById('play-button');
+let currentAudio = null; // 用來存放當前播放的 Audio 物件
+
+// ----------------------------------------------------------------------
+// 步驟 2: 核心功能 - 播放音檔
+// ----------------------------------------------------------------------
+function playAudio() {
+    if (currentLevel >= totalLevels) return; // 遊戲結束
+    
+    const currentData = gameData[currentLevel];
+    
+    // --- 【重要替換區塊】 ---
+    // 在你的專題中，這裡將替換成播放你的族語語音檔
+    // 例如：currentAudio = new Audio('audio/' + currentData.audioFile);
+    // 
+    // Demo 模擬：使用瀏覽器的 Text-to-Speech 模擬語音播放
+    const utterance = new SpeechSynthesisUtterance(currentData.word);
+    utterance.lang = 'zh-TW'; // 設為中文發音
+    window.speechSynthesis.speak(utterance);
+    // -------------------------
+
+    audioHintElement.textContent = `請點擊對應「${currentData.word}」的方塊 (族語發音中...)`;
+    playButton.disabled = true; // 播放時禁止重複點擊
+    setTimeout(() => { playButton.disabled = false; }, 2000); // 2秒後允許再次點擊
+}
+
+// ----------------------------------------------------------------------
+// 步驟 3: 核心功能 - 檢查答案
+// ----------------------------------------------------------------------
+function checkAnswer(isCorrect, blockElement) {
+    if (currentLevel >= totalLevels) return;
+
+    if (isCorrect) {
+        // 答對了：給予正向反饋，進入下一關
+        feedbackElement.textContent = "✅ 答對了！進入下一關！";
+        setTimeout(nextLevel, 1000); // 1秒後切換關卡
+    } else {
+        // 答錯了：給予錯誤反饋，重新播放語音
+        feedbackElement.textContent = "❌ 答錯了！請再聽一次。";
+        blockElement.classList.add('wrong-answer');
+        
+        // 移除錯誤動畫
+        setTimeout(() => {
+            blockElement.classList.remove('wrong-answer');
+        }, 500);
+        
+        // 重新播放語音
+        setTimeout(playAudio, 1000); 
+    }
+}
+
+// ----------------------------------------------------------------------
+// 步驟 4: 核心功能 - 渲染/切換關卡
+// ----------------------------------------------------------------------
+function renderLevel() {
+    if (currentLevel >= totalLevels) {
+        // 遊戲結束
+        optionsContainer.innerHTML = `<div class="final-screen">恭喜！你已完成所有關卡！<br>🎉 專題 Demo 成功運行 🎉</div>`;
+        feedbackElement.textContent = "";
+        playButton.style.display = 'none';
+        audioHintElement.textContent = "點擊下方的按鈕重新開始。";
+        
+        const restartButton = document.createElement('button');
+        restartButton.id = 'replay-button';
+        restartButton.textContent = '重新開始';
+        restartButton.onclick = () => { currentLevel = 0; startGame(); };
+        optionsContainer.appendChild(restartButton);
+        
+        updateProgress();
+        return;
+    }
+
+    const currentData = gameData[currentLevel];
+    optionsContainer.innerHTML = ''; // 清空選項
+    feedbackElement.textContent = "";
+    playButton.style.display = 'block';
+
+    // 渲染選項方塊
+    currentData.options.forEach(option => {
+        const block = document.createElement('div');
+        block.classList.add('option-block');
+        block.textContent = option.text; // Demo 使用文字，你的專題這裡會是圖片
+        
+        // 綁定點擊事件
+        block.onclick = () => checkAnswer(option.isCorrect, block);
+        
+        optionsContainer.appendChild(block);
+    });
+
+    updateProgress();
+    playAudio(); // 進入新關卡後，自動播放語音
+}
+
+// ----------------------------------------------------------------------
+// 步驟 5: 進度條更新
+// ----------------------------------------------------------------------
+function updateProgress() {
+    const percentage = (currentLevel / totalLevels) * 100;
+    progressElement.style.width = `${percentage}%`;
+}
+
+// ----------------------------------------------------------------------
+// 步驟 6: 流程控制
+// ----------------------------------------------------------------------
+function nextLevel() {
+    currentLevel++;
+    renderLevel();
+}
+
+function startGame() {
+    currentLevel = 0;
+    renderLevel();
+}
+
+// 遊戲開始
+window.onload = startGame;
+</script>
+</body>
+</html>
