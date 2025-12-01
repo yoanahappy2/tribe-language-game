@@ -332,7 +332,7 @@ function playAudio() {
     const currentData = currentGameData[currentLevel];
     
     // 1. 播放音檔
-    const audioPath = 'audio/' + currentData.audioFile;
+    const audioPath = '../audio/' + currentData.audioFile; // ✅ 修正：跳出 test 資料夾，回到根目錄找 audio
     currentAudio = new Audio(audioPath);
 
     currentAudio.play().catch(error => {
